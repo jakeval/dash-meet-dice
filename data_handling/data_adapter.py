@@ -45,15 +45,17 @@ class DataAdapter:
   def print_recourse(dir): # set missing values to 0; no change
     pass
 
-  def data_representation(poi, points, immutable_features=None):
+  def data_representation(self, points, poi=None, immutable_features=None):
+    if poi is None: # todo: this is fragile
+      return self.data_df.loc[points.index,:]
     recourse_df = self.reconstruct_data_from_poi(poi, points, immutable_features)
     data_df = self.recourse_data.recover_data_representation(poi, recourse_df)
     return data_df
 
-  def model_representation(df):
+  def model_representation(self, df):
     return self.model_data.convert(df)
 
-  def reconstruct_data_from_poi(poi, points, immutable_features=None):
+  def reconstruct_data_from_poi(self, poi, points, immutable_features=None):
     columns, dropped_columns = self.recourse_data.recover_columns(immutable_features=immutable_features)
     new_points = np.empty((points.shape[0], poi.shape[1]))
     new_points[:,columns.shape[0]:] = points

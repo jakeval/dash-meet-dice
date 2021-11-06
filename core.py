@@ -3,9 +3,6 @@ from sklearn.decomposition import PCA
 import numpy as np
 
 da = AdultDataAdapter('../data/adult.data.reformatted', '../data/adult.test.reformatted', reformat=False)
-poi = da.random_poi()
-#print(poi)
-#da.print_point(poi)
 
 def get_pca_2d():
     pca = PCA(2)
@@ -24,3 +21,10 @@ def get_pca_3d():
     df['ypos'] = pca_data[:,1]
     df['zpos'] = pca_data[:,2]
     return df
+
+def get_printable_poi():
+    poi = da.random_poi()
+    return da.data_representation(poi)
+
+def get_printable_points(n):
+    return da.data_df.sample(n)

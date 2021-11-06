@@ -21,7 +21,7 @@ class ModelData:
     ohe = OneHotEncoder().fit(train_df[self.category_columns])
     for df in [train_df, test_df]:
       new_data = ohe.transform(df[self.category_columns]).toarray()
-      new_columns = ohe.get_feature_names(self.category_columns)
+      new_columns = ohe.get_feature_names_out(self.category_columns)
       df[new_columns] = new_data
     train_df = train_df.drop(columns=self.category_columns)
     test_df = test_df.drop(columns=self.category_columns)
@@ -37,7 +37,7 @@ class ModelData:
       model_df[column] = le.transform(df[column])
     
     new_data = self.ohe.transform(df[self.category_columns]).toarray()
-    new_columns = self.ohe.get_feature_names(self.category_columns)
+    new_columns = self.ohe.get_feature_names_out(self.category_columns)
     model_df[new_columns] = new_data
     model_df = model_df.drop(columns=self.category_columns)
 
@@ -52,7 +52,7 @@ class RecourseData:
     self.binary_columns = ['marital-status', 'sex']
     self.category_columns = ['workclass', 'occupation', 'race']
     df_X = df.drop(columns=['income'])
-    self.mean, self.std = df_X.mean(), df_X.std()
+    self.mean, self.std = df_X.mean(numeric_only=True), df_X.std(numeric_only=True)
     self.normalized_columns = self.mean.index
     df[self.normalized_columns] = (df[self.normalized_columns] - self.mean)/self.std
     self.df, self.le_dict, self.ohe_dict = self.process_data(df)
@@ -80,7 +80,7 @@ class RecourseData:
       column_df = recourse_df.loc[:, recourse_df.columns == column]
       ohe = OneHotEncoder().fit(column_df)
       new_data = ohe.transform(column_df).toarray()
-      new_columns = ohe.get_feature_names([column])
+      new_columns = ohe.get_feature_names_out([column])
       recourse_df[new_columns] = new_data
       ohe_dict[column] = ohe
     recourse_df = recourse_df.drop(columns=self.category_columns)
@@ -95,7 +95,7 @@ class RecourseData:
     columns = []
     for feature in features:
       if feature in self.ohe_dict:
-        dummy_columns = self.ohe_dict[feature].get_feature_names([feature])
+        dummy_columns = self.ohe_dict[feature].get_feature_names_out([feature])
         columns = columns + dummy_columns
       else:
         columns.append(feature)
@@ -105,7 +105,7 @@ class RecourseData:
     all_columns = self.X.columns
     dropped_columns = []
     if immutable_features is not None:
-      dropped_columns = self.ohe.get_feature_names(immutable_features)
+      dropped_columns = self.ohe.get_feature_names_out(immutable_features)
     retained_columns = all_columns[~all_columns.isin(dropped_columns)]
     return retained_columns, dropped_columns
 
@@ -113,7 +113,7 @@ class RecourseData:
     recourse_df = df.copy()
     for column, le in self.le_dict:
       recourse_df[column] = le.inverse_transform(recourse_df[column])
-    encoded_columns = self.ohe.get_feature_names(self.category_columns)
+    encoded_columns = self.ohe.get_feature_names_out(self.category_columns)
     recourse_df[self.category_columns] = self.ohe.inverse_transform(recourse_df[encoded_columns])
     recourse_df = recourse_df * self.std + self.mean
 
