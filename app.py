@@ -1,4 +1,5 @@
 import dash
+import dash_bootstrap_components as dbc
 from dash import dcc
 from dash import html
 from dash import dash_table
@@ -9,36 +10,54 @@ import core as core
 import numpy as np
 from dash.dependencies import Input, Output
 
-def get_figure(data, displayable_columns, selected_points=None, newpoints=None):
-    size = 10
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.MINTY])
+data = core.get_pca_2d()
 
+displayable_columns = data.columns[~data.columns.isin(['xpca', 'ypca'])]
+
+def get_figure(data, displayable_columns, selected_points=None, newpoints=None, xaxis=None, yaxis=None):
+    size = 10
     newdata = data.copy()
     newpoint_idx = None
     if newpoints is not None:
+        newpoints = core.pca_process(newpoints)
         newdata = pd.concat([newdata, newpoints])
         newpoint_idx = np.arange(data.shape[0], newdata.shape[0])
 
-    income = newdata['income'].to_numpy()
-    income = np.where(income == '>50', 1., -1.)
+    income = newdata['income']
 
-    small_columns = ['age', 'race', 'sex']
+    if xaxis is None:
+        xaxis = "xpca"
+        yaxis = "ypca"
+
+    small_columns = ['age', 'race', 'gender', 'income']
     hover_text = ""
     for i, column in enumerate(displayable_columns):
         if column in small_columns:
-            hover_text += f"{column}: " + "%{customdata[" + str(i) +"]}\n"
-    fig = go.Figure(data=go.Scattergl(
-        x=newdata["xpos"],
-        y=newdata["ypos"],
-        mode='markers',
-        ids=newdata.index,
-        customdata=newdata[displayable_columns],
-        hovertemplate=hover_text,
-        marker={
-            'color': income,
-            'cmax': 1,
-            'cmin': -1
-        }
-    ))
+            hover_text += f"{column}: " + "%{customdata[" + str(i) +"]}, "
+    trace = go.Scattergl(
+            x=newdata[xaxis],
+            y=newdata[yaxis],
+            mode='markers',
+            ids=newdata.index,
+            customdata=newdata[displayable_columns],
+            hovertemplate=hover_text,
+            marker={
+                'color': income,
+                'cmax': 1,
+                'cmin': 0,
+                'opacity': 0.8
+        })
+    layout = go.Layout(
+        margin=go.layout.Margin(
+            l=0,
+            r=0,
+            b=0,
+            t=0
+        )
+    )
+    fig = go.Figure(data=[trace], layout=layout)
+    fig.update_traces(marker_colorscale=[[0, 'rgb(80, 121, 186)'], [1, 'rgb(214, 132, 49)']])
     fig.update_layout(clickmode='event+select')
     if selected_points is not None:
         joined = np.concatenate([np.array(selected_points), newpoint_idx])
@@ -47,7 +66,7 @@ def get_figure(data, displayable_columns, selected_points=None, newpoints=None):
             selected={
                 'marker': {
                     'size': size,
-                    'color': 'rgb(255,0,0)'
+                    'color': 'rgb(56, 209, 128)'
                 }
             },
             unselected={
@@ -58,46 +77,67 @@ def get_figure(data, displayable_columns, selected_points=None, newpoints=None):
 
     return fig
 
-
-app = dash.Dash(__name__)
-
-data = core.get_pca_2d()
-
-displayable_columns = data.columns[~data.columns.isin(['id', 'xpos', 'ypos'])]
-
-points = core.get_printable_points(5)[['age', 'race', 'sex']]
-
-components = {
-    'display': [
-        html.Label('Data Display'),
-        dcc.Graph(
-            id='main-display',
-            figure=get_figure(data, displayable_columns)
-        )
-    ],
-    'title': [
-        html.H1('DiCE:'),
-        html.H2('Diverse Counterfactual Explanations for Machine Learning Classifiers'),
-    ],
-    'controls': [
-        html.Label(id='algorithm-label'),
-        dcc.RadioItems(
+controls = dbc.Col([
+    html.H5("Pick the axes:"),
+    dbc.Row([
+        dbc.Col(dbc.Select(
+            id="x-select",
             options=[
-                {'label': 'DiCE', 'value': 'dice'},
-                {'label': 'MRMC', 'value': 'mrmc'}
+                {"label": column, "value": column} for column in data.columns
             ],
-            value='dice',
-            id='algorithm-input'
-        )
-    ],
-    'output': [
-        html.Div('This is where the algorithm description and output goes'),
-        html.Br(),
-        html.Div("There's a lot to put here! But right now it's pretty empty."),
-        html.Br(),
-        html.Div(children=[], id='recourse-display')
-    ]
-}
+            value='xpca'
+        )),
+        dbc.Col(dbc.Select(
+            id="y-select",
+            options=[
+                {"label": column, "value": column} for column in data.columns
+            ],
+            value='ypca'
+        ))
+    ]),
+])
+
+title = dbc.Container([
+    html.H1('DiCE:'),
+    html.H3('Diverse Counterfactual Explanations for Machine Learning Classifiers'),
+])
+
+description = dbc.Container([
+    html.H5("Algorithmic Recourse"),
+    html.Div(
+        """When a machine learning algorithm makes an automated decisiona about an individual,
+        it is important to inform them how they can change their outcome. This is done by finding
+        similar individuals in the dataset that received a different outcome."""),
+    html.Br(),
+    html.Div(
+        """
+        The displayed dataset is the often-used Adult Income Dataset. Orange points are predicted to have an income greater than
+        50k, whereas blue points are predicted to have lower income.
+        """
+    ),
+    html.Br(),
+    html.Div(
+        """
+        Imagine that a machine learning algorithm uses this dataset to approve or reject loans.
+        If you are rejected, what can you change? Try selecting points from the display and seeing
+        what the changes suggested by Microsoft's explanations (generated by DiCE) are.
+        """
+    )
+])
+
+display = dbc.Col([dbc.Container([
+    html.Label('Adult Income Dataset Visualization'),
+    dcc.Graph(
+        id='main-display',
+        figure=get_figure(data, displayable_columns)
+    )
+])])
+
+recourse_output = dbc.Col([
+    dbc.Row(dbc.Col(html.H4("Printed Recourse"))),
+    dbc.Row(dbc.Col([], id='recourse-display'))])
+
+footer = dbc.Container("Built with plotly Dash and Microsoft DiCE")
 
 def transform_df(df, new_columns):
     rows = []
@@ -127,47 +167,45 @@ def make_recourse_display(poi, recourse, columns_to_display=None):
                 id='joint-table',
                 columns=[{'name': column, 'id': column} for column in df_columns],
                 data=df_dict,
-                style_cell={'fontSize':12, 'font-family':'sans-serif'}
+                style_cell={'fontSize':16, 'font-family':'sans-serif' }
             )
     return table
+
 
 @app.callback(
     Output('recourse-display', 'children'),
     Output('main-display', 'figure'),
-    Input('main-display', 'clickData')
+    Input('main-display', 'clickData'),
+    Input('x-select', 'value'),
+    Input('y-select', 'value')
 )
-def click_on_poi(clickData):
+def click_on_poi(clickData, xaxis, yaxis):
     if clickData is None:
         return html.Div("Try clicking a point in the display!"), get_figure(data, displayable_columns)
     poi_index = clickData['points'][0]['id']
-    poi = core.da.data_df.iloc[core.da.data_df.index == poi_index,:]
-    recourse = data.sample(3)
+
+    poi = data.iloc[data.index == poi_index,:]
+    recourse = core.get_explanations(poi[displayable_columns])
     selected_points = np.concatenate([poi.index.to_numpy(), recourse.index.to_numpy()])
     selected_points = [clickData['points'][0]['pointIndex']]
-    return make_recourse_display(poi, recourse), get_figure(data, displayable_columns, selected_points, recourse)
+    return make_recourse_display(poi, recourse), get_figure(data, displayable_columns, selected_points, recourse, xaxis, yaxis)
 
 
-@app.callback(
-    Output(component_id='algorithm-label', component_property='children'),
-    Input(component_id='algorithm-input', component_property='value')
-)
-def update_algorithm_label(input_value):
-    return f'Recourse Algorithm ({input_value} not implemented yet)'
-
-app.layout = html.Div(children=[
-    html.Div(children=[
-        *components['title'],
-    ], style={'padding': 1, 'flex': 1}),
-    html.Div(children=[
-        html.Div(children=[
-            *components['controls'],
-            *components['display'],
-        ], style={'padding': 1, 'flex': 2}),
-        html.Div(children=[
-            *components['output']
-        ], style={'padding': 1, 'flex': 1})
-    ], style={'display': 'flex', 'flex-direction': 'row', 'padding': 1, 'flex': 5}),
-], style={'display': 'flex', 'flex-direction': 'column'})
+app.layout = dbc.Container([
+    title,
+    html.Hr(),
+    dbc.Row([
+        dbc.Col(
+            [
+                dbc.Row([controls]),
+                dbc.Row([display])
+            ], 
+            md=8),
+        dbc.Col([description], md=4)
+    ]),
+    dbc.Row([recourse_output]),
+    dbc.Row([dbc.Col(footer)])
+])
 
 if __name__ == '__main__':
     app.run_server(debug=True)
