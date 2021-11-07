@@ -9,14 +9,14 @@ import core as core
 import numpy as np
 from dash.dependencies import Input, Output
 
-def get_figure(data, displayable_columns, selected_points=None, newpoint=None):
+def get_figure(data, displayable_columns, selected_points=None, newpoints=None):
     size = 10
 
     newdata = data.copy()
     newpoint_idx = None
-    if newpoint is not None:
-        newdata = pd.concat([newdata, newpoint])
-        newpoint_idx = newdata.shape[0] - 1
+    if newpoints is not None:
+        newdata = pd.concat([newdata, newpoints])
+        newpoint_idx = np.arange(data.shape[0], newdata.shape[0])
 
     income = newdata['income'].to_numpy()
     income = np.where(income == '>50', 1., -1.)
@@ -41,8 +41,9 @@ def get_figure(data, displayable_columns, selected_points=None, newpoint=None):
     ))
     fig.update_layout(clickmode='event+select')
     if selected_points is not None:
+        joined = np.concatenate([np.array(selected_points), newpoint_idx])
         fig.update_traces(
-            selectedpoints=selected_points + [newpoint_idx],
+            selectedpoints=joined,
             selected={
                 'marker': {
                     'size': size,
@@ -119,7 +120,9 @@ def make_recourse_display(poi, recourse, columns_to_display=None):
         columns_to_display = displayable_columns
     
     df = pd.concat([poi[columns_to_display], recourse[columns_to_display]])
-    df_dict, df_columns = transform_df(df, new_columns=['Selected Point', 'Recourse Point'])
+    new_columns = [f"Recourse Point {i}" for i in range(recourse.shape[0])]
+
+    df_dict, df_columns = transform_df(df, new_columns=['Selected Point'] + new_columns)
     table = dash_table.DataTable(
                 id='joint-table',
                 columns=[{'name': column, 'id': column} for column in df_columns],
@@ -138,7 +141,7 @@ def click_on_poi(clickData):
         return html.Div("Try clicking a point in the display!"), get_figure(data, displayable_columns)
     poi_index = clickData['points'][0]['id']
     poi = core.da.data_df.iloc[core.da.data_df.index == poi_index,:]
-    recourse = data.sample(1)
+    recourse = data.sample(3)
     selected_points = np.concatenate([poi.index.to_numpy(), recourse.index.to_numpy()])
     selected_points = [clickData['points'][0]['pointIndex']]
     return make_recourse_display(poi, recourse), get_figure(data, displayable_columns, selected_points, recourse)
